@@ -27,6 +27,71 @@ import java.util.Scanner;
 
 
 public class ImageProcessor {
+
+  /**
+   * Basic checks for "circle-like" properties.
+   */
+  public static boolean componentIsCircular(ConnectedComponent cc) {
+    int width = cc.xmax - cc.xmin + 1;
+    int height = cc.ymax - cc.ymin + 1;
+    boolean[][] componentPoints = new boolean[width][height];
+    for (Point p : cc.points) {
+      componentPoints[p.x - cc.xmin][p.y - cc.ymin] = true;
+    }
+    int xc = (cc.xmin + cc.xmax) / 2 - cc.xmin;
+    int yc = (cc.ymin + cc.ymax) / 2 - cc.ymin;
+
+    // For now, reject if the center point is on the component.
+    // TODO(dhuo): Maybe need to relax this for oddly shapred LVs.
+    if (componentPoints[xc][yc]) return false;
+
+    // Go left.
+    boolean leftOkay = false;
+    for (int x = xc; x >= 0; --x) {
+      if (componentPoints[x][yc]) {
+        leftOkay = true;
+        break;
+      }
+    }
+    if (!leftOkay) {
+      return false;
+    }
+
+    boolean rightOkay = false;
+    for (int x = xc; x < width; ++x) {
+      if (componentPoints[x][yc]) {
+        rightOkay = true;
+        break;
+      }
+    }
+    if (!rightOkay) {
+      return false;
+    }
+
+    boolean upOkay = false;
+    for (int y = yc; y >= 0; --y) {
+      if (componentPoints[xc][y]) {
+        upOkay = true;
+        break;
+      }
+    }
+    if (!upOkay) {
+      return false;
+    }
+
+    boolean downOkay = false;
+    for (int y = yc; y < height; ++y) {
+      if (componentPoints[xc][y]) {
+        downOkay = true;
+        break;
+      }
+    }
+    if (!downOkay) {
+      return false;
+    }
+    return true;
+  }
+
   /**
    * For non-zero values in {@code diffs}, computes connected components.
    */
@@ -62,7 +127,9 @@ public class ImageProcessor {
             }
           }
           newComponent.computeStats();
-          scc.add(newComponent);
+          if (componentIsCircular(newComponent)) {
+            scc.add(newComponent);
+          }
         }
       }
     }

@@ -56,3 +56,4 @@ The lib/ files will need to be made available on java.library.path.
   -Last number suffix appears to denote different slice locations which may overlap with other sax directories for the same case.
   -Series number still the same within the mixed directory.
   -Dedupe by SeriesNumber-SliceLocation?
+-Maybe use niblack instead of naive luminosity threshold for binarization

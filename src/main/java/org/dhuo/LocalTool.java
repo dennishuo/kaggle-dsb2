@@ -109,7 +109,7 @@ public class LocalTool {
 
         for (int j = 0; j < sccToDraw.size(); ++j) {
           ConnectedComponent cc = sccToDraw.get(j);
-          int rgb = ((j * 1234567) & 0x00ffffff) | 0xff000000;
+          int rgb = (((j + 1) * 1234567) & 0x00ffffff) | 0xff000000;
           for (Point p : cc.points) {
             cur.setRGB(p.x, p.y, rgb);
           }
