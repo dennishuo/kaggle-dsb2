@@ -67,8 +67,8 @@ public class LocalTool {
     Graphics g = display.getGraphics();
     g.drawImage(baseImage, 0, 0, null);
     g.setColor(Color.GREEN);
-    g.drawString(dicom.getTitle(), 10, 20);
-    g.drawString("SliceLocation: " + parsed.sliceLocation, 10, 35);
+    //g.drawString(dicom.getTitle(), 10, 20);
+    //g.drawString("SliceLocation: " + parsed.sliceLocation, 10, 35);
     return display;
   }
 
@@ -83,6 +83,27 @@ public class LocalTool {
         dicom.run(input.getName());
         BufferedImage display = getProcessedImage(dicom);
         imageList.add(display);
+      }
+
+      for (int i = 0; i < imageList.size(); ++i) {
+        BufferedImage cur = imageList.get(i);
+        int width = cur.getWidth();
+        int height = cur.getHeight();
+        for (int x = 0; x < width; ++x) {
+          for (int y = 0; y < height; ++y) {
+            int rgbCur = cur.getRGB(x, y);
+            int rc = (rgbCur >> 16) & 0x000000ff;
+            int gc = (rgbCur >> 8) & 0x000000ff;
+            int bc = rgbCur & 0x000000ff;
+            int avg = (int) Math.sqrt((rc * rc + gc * gc + bc * bc) / 3);
+
+            int numColors = 4;
+            avg /= (256 / numColors);
+            avg *= 256 / numColors;
+            if (avg > 255) avg = 255;
+            cur.setRGB(x, y, 0xff000000 | (avg) | (avg << 8) | (avg << 16));
+          }
+        }
       }
 
       // Try to diff consecutive images.
@@ -115,13 +136,19 @@ public class LocalTool {
             int avgDiff = dr + dg + db;
             if (avgDiff < 0) avgDiff = 0;
             if (avgDiff > 255) avgDiff = 255;
-            diff[x][y] = avgDiff;
+            if ((rgbCur & 0x00ffffff) == 0 &&
+                (rgbPrev & 0x00ffffff) != 0 ) {
+              diff[x][y] = 0xffff0000;
+            } else if ((rgbCur & 0x00ffffff) != 0 &&
+                (rgbPrev & 0x00ffffff) == 0 ) {
+              diff[x][y] = 0xff00ff00;
+            }
           }
         }
         diffs.add(diff);
       }
 
-      /*for (int i = 1; i < imageList.size(); ++i) {
+      for (int i = 1; i < imageList.size(); ++i) {
         int[][] diff = diffs.get(i - 1);
         BufferedImage cur = imageList.get(i);
         int width = cur.getWidth();
@@ -133,15 +160,16 @@ public class LocalTool {
           }
         }
         avgDiff /= (width * height);
-        System.out.println("avgDiff: " + avgDiff);
+        //System.out.println("avgDiff: " + avgDiff);
         for (int x = 0; x < width; ++x) {
           for (int y = 0; y < height; ++y) {
-            if (diff[x][y] > avgDiff) {
-              cur.setRGB(x, y, 0xff000000 | (int)(avgDiff << 8));
+            if (diff[x][y] != 0) {
+              //cur.setRGB(x, y, 0xff00ff00 | (int)(avgDiff << 8));
+              cur.setRGB(x, y, diff[x][y]);
             }
           }
         }
-      }*/
+      }
       while (true) {
         for (BufferedImage img : imageList) {
           lazyInit(img.getWidth(), img.getHeight());
@@ -157,6 +185,8 @@ public class LocalTool {
       BufferedImage display = getProcessedImage(dicom);
       int width = display.getWidth();
       int height = display.getHeight();
+      System.out.println("width: " + width);
+      System.out.println("height: " + height);
       lazyInit(width, height);
       panel.setDisplay(display);
     }

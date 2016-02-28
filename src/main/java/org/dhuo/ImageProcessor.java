@@ -3,6 +3,7 @@ package org.dhuo;
 import ij.plugin.DICOM;
 import ij.plugin.filter.GaussianBlur;
 import ij.plugin.filter.BackgroundSubtracter;
+import ij.plugin.filter.RankFilters;
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.KeyPoint;
@@ -30,6 +31,8 @@ public class ImageProcessor {
     subtractor.rollingBallBackground(
         dicom.getProcessor(),
         20, false, false, false, false, true);*/
+    RankFilters filter = new RankFilters();
+    filter.rank(dicom.getProcessor(), 5, RankFilters.MEDIAN);
     
     BufferedImage baseImage = dicom.getProcessor().getBufferedImage();
     int width = baseImage.getWidth();
