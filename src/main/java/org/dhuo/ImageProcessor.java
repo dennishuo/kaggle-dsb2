@@ -45,6 +45,36 @@ public class ImageProcessor {
     // TODO(dhuo): Maybe need to relax this for oddly shapred LVs.
     if (componentPoints[xc][yc]) return false;
 
+    // Proactively compute innerPoints while we're flood-filling the center to see if the
+    // circle is inclosed anyways.
+    boolean[][] visited = new boolean[width][height];
+    Point first = new Point(xc, yc);
+    LinkedList<Point> queue = new LinkedList<Point>();
+    queue.add(first);
+    cc.innerPoints.add(first);
+    visited[xc][yc] = true;
+    while (!queue.isEmpty()) {
+      Point cur = queue.removeFirst();
+      for (int dx = cur.x - 1; dx <= cur.x + 1; ++dx) {
+        for (int dy = cur.y - 1; dy <= cur.y + 1; ++dy) {
+          if (dx < 0 || dx >= width || dy < 0 || dy >= height) {
+            // Escaped bounds; this is not a properly enclosed circle.
+            // case 1 sax_5 shrink is a test case for this (straight-cross doesn't
+            // prune it as a non-circle, but inner flood-fill prunes it.
+            return false;
+          }
+          if (visited[dx][dy]) continue;
+          // Non-component-points are what we're looking to flood fill now.
+          if (!componentPoints[dx][dy]) {
+            Point neigh = new Point(dx, dy);
+            queue.addLast(neigh);
+            cc.innerPoints.add(neigh);
+            visited[dx][dy] = true;
+          }
+        }
+      }
+    }
+
     // Go left.
     boolean leftOkay = false;
     for (int x = xc; x >= 0; --x) {
@@ -116,6 +146,7 @@ public class ImageProcessor {
             Point cur = queue.removeFirst();
             for (int dx = cur.x - 1; dx <= cur.x + 1; ++dx) {
               for (int dy = cur.y - 1; dy <= cur.y + 1; ++dy) {
+                if (dx < 0 || dx >= width || dy < 0 || dy >= height) continue;
                 if (visited[dx][dy]) continue;
                 if (diffs[dx][dy] != 0) {
                   Point neigh = new Point(dx, dy);
@@ -182,6 +213,58 @@ public class ImageProcessor {
   }
 
   /**
+   * Out of a pruned set of sccs, chooses one that's most likely to be the LV.
+   */
+  public static ConnectedComponent chooseScc(List<ConnectedComponent> sccs, ParsedImage parsed) {
+    if (sccs.size() == 0) {
+      return null;
+    }
+
+    int xCenter = parsed.image.getWidth() / 2;
+    int yCenter = parsed.image.getHeight() / 2;
+    double minDistance = Double.MAX_VALUE;
+    ConnectedComponent choice = null;
+    for (ConnectedComponent cc : sccs) {
+      int xc = (cc.xmin + cc.xmax) / 2;
+      int yc = (cc.ymin + cc.ymax) / 2;
+      int dx = xc - xCenter;
+      int dy = yc - yCenter;
+      double dist = dx * dx + dy * dy;
+      if (dist < minDistance) {
+        minDistance = dist;
+        choice = cc;
+      }
+    }
+
+    /*double minEcc = Double.MAX_VALUE;
+    ConnectedComponent choice = null;
+    for (ConnectedComponent cc : sccs) {
+      int width = cc.xmax - cc.xmin;
+      int height = cc.ymax - cc.ymin;
+      double ecc = ((double)Math.max(width, height)) / Math.min(width, height);
+      if (ecc < minEcc) {
+        minEcc = ecc;
+        choice = cc;
+      }
+    }*/
+    return choice;
+  }
+
+  /**
+   * Assuming {@code lv} corresponds to the left ventricle, computes systole area.
+   */
+  public static double computeAreaSystole(ConnectedComponent lv, ParsedImage parsed) {
+    return lv.innerPoints.size() * parsed.pixelSpacingX * parsed.pixelSpacingY;
+  }
+
+  /**
+   * Assuming {@code lv} corresponds to the left ventricle, computes diastole area.
+   */
+  public static double computeAreaDiastole(ConnectedComponent lv, ParsedImage parsed) {
+    return (lv.innerPoints.size() + lv.points.size()) * parsed.pixelSpacingX * parsed.pixelSpacingY;
+  }
+
+  /**
    * Clips to 0 or 255 based on threshold.
    */
   public static int getClipped(int rgbCur, int threshold) {
@@ -244,22 +327,25 @@ public class ImageProcessor {
     int width = baseImage.getWidth();
     int height = baseImage.getHeight();
 
-    String metadataString = dicom.getInfoProperty();
-    Scanner scan = new Scanner(metadataString);
-    double sliceLocation = 0;
-    while (scan.hasNextLine()) {
-      String line = scan.nextLine();
-      if (line.indexOf("Slice Location") != -1) {
-        sliceLocation = Double.parseDouble(line.split(":")[1].trim());
-      }
-    }
-
     BufferedImage display = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
     display.getGraphics().drawImage(baseImage, 0, 0, null);
 
     ParsedImage toReturn = new ParsedImage();
-    toReturn.sliceLocation = sliceLocation;
     toReturn.image = display;
+
+    String metadataString = dicom.getInfoProperty();
+    Scanner scan = new Scanner(metadataString);
+    while (scan.hasNextLine()) {
+      String line = scan.nextLine();
+      if (line.indexOf("Slice Location") != -1) {
+        toReturn.sliceLocation = Double.parseDouble(line.split(":")[1].trim());
+      } else if (line.indexOf("Pixel Spacing") != -1) {
+        String token = line.split(":")[1].trim();
+        String[] parts = token.split("\\\\");
+        toReturn.pixelSpacingX = Double.parseDouble(parts[0]);
+        toReturn.pixelSpacingY = Double.parseDouble(parts[1]);
+      }
+    }
     return toReturn;
   }
 }

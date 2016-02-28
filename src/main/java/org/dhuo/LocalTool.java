@@ -81,6 +81,7 @@ public class LocalTool {
         diffsToDraw = combinedDiffs.shrinkDiffs;
         sccToDraw = combinedDiffs.shrinkScc;
       }
+      ConnectedComponent chosen = ImageProcessor.chooseScc(sccToDraw, parsedList.get(0));
 
       // Clip to 4 colors
       for (int i = 0; i < imageList.size(); ++i) {
@@ -99,11 +100,12 @@ public class LocalTool {
             avg /= (256 / numColors);
             avg *= 256 / numColors;
             if (avg > 255) avg = 255;
-            if (diffsToDraw[x][y] != 0) {
+            cur.setRGB(x, y, 0xff000000 | (avg) | (avg << 8) | (avg << 16));
+            /*if (diffsToDraw[x][y] != 0) {
               cur.setRGB(x, y, diffsToDraw[x][y]);
             } else {
               cur.setRGB(x, y, 0xff000000 | (avg) | (avg << 8) | (avg << 16));
-            }
+            }*/
           }
         }
 
@@ -113,6 +115,10 @@ public class LocalTool {
           for (Point p : cc.points) {
             cur.setRGB(p.x, p.y, rgb);
           }
+          rgb = (((j + 2) * 1234567) & 0x00ffffff) | 0xff000000;
+          for (Point p : cc.innerPoints) {
+            cur.setRGB(p.x + cc.xmin, p.y + cc.ymin, rgb);
+          }
           cur.getGraphics().setColor(Color.WHITE);
           cur.getGraphics().drawLine(
               (cc.xmin + cc.xmax) / 2, cc.ymin, 
@@ -121,6 +127,17 @@ public class LocalTool {
               cc.xmin, (cc.ymin + cc.ymax) / 2,
               cc.xmax, (cc.ymin + cc.ymax) / 2);
         }
+        if (chosen != null) {
+          for (Point p : chosen.points) {
+            cur.setRGB(p.x, p.y, 0xffffffff);
+          }
+        }
+      }
+      if (chosen != null) {
+        System.out.println("Computed systole area: " + ImageProcessor.computeAreaSystole(
+            chosen, parsedList.get(0)));
+        System.out.println("Computed diastole area: " + ImageProcessor.computeAreaDiastole(
+            chosen, parsedList.get(0)));
       }
 
       // Try to diff consecutive images.
@@ -199,11 +216,15 @@ public class LocalTool {
       dicom.run(inputFile.getName());
       System.out.println("Title: " + dicom.getTitle());
       System.out.println(dicom.getInfoProperty());
-      BufferedImage display = ImageProcessor.getProcessedImage(dicom).image;
+      ParsedImage parsed = ImageProcessor.getProcessedImage(dicom);
+      BufferedImage display = parsed.image;
       int width = display.getWidth();
       int height = display.getHeight();
       System.out.println("width: " + width);
       System.out.println("height: " + height);
+      System.out.println("Parsed sliceLocation: " + parsed.sliceLocation);
+      System.out.println("Parsed pixelSpacingX: " + parsed.pixelSpacingX);
+      System.out.println("Parsed pixelSpacingY: " + parsed.pixelSpacingY);
       lazyInit(width, height);
       panel.setDisplay(display);
     }

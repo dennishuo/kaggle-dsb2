@@ -8,7 +8,12 @@ import java.util.List;
  * Represents a set of connected points.
  */
 public class ConnectedComponent {
+  // These are absolute in the image.
   public List<Point> points = new ArrayList<Point>();
+
+  // For now, these are relative to xmin/ymin.
+  public List<Point> innerPoints = new ArrayList<Point>();
+
   int xmin, xmax, ymin, ymax;
 
   /**
