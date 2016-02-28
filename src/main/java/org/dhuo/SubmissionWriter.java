@@ -45,7 +45,8 @@ public class SubmissionWriter {
       out.print(",P" + i);
     }
     out.println();
-    for (int caseNumber = 1; caseNumber <= 500; ++caseNumber) {
+    //for (int caseNumber = 1; caseNumber <= 500; ++caseNumber) {
+    for (int caseNumber = 501; caseNumber <= 700; ++caseNumber) {
       out.print(caseNumber + "_Diastole");
       for (int vol = 0; vol < 600; ++vol) {
         if (usingObservedProb) {

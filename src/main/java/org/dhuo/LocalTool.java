@@ -17,8 +17,9 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Collections;
+import java.util.List;
+import java.util.Scanner;
 import javax.imageio.ImageIO;
 import javax.swing.*;
 
@@ -58,15 +59,16 @@ public class LocalTool {
   }
 
   public static BufferedImage getProcessedImage(DICOM dicom) throws Exception {
-    BufferedImage baseImage = dicom.getProcessor().getBufferedImage();
-    int width = baseImage.getWidth();
-    int height = baseImage.getHeight();
-
+    ParsedImage parsed = ImageProcessor.getProcessedImage(dicom);
+    BufferedImage baseImage = parsed.image;
+    int width  = baseImage.getWidth();
+    int height  = baseImage.getHeight();
     BufferedImage display = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
     Graphics g = display.getGraphics();
     g.drawImage(baseImage, 0, 0, null);
     g.setColor(Color.GREEN);
     g.drawString(dicom.getTitle(), 10, 20);
+    g.drawString("SliceLocation: " + parsed.sliceLocation, 10, 35);
     return display;
   }
 
@@ -82,6 +84,64 @@ public class LocalTool {
         BufferedImage display = getProcessedImage(dicom);
         imageList.add(display);
       }
+
+      // Try to diff consecutive images.
+      List<int[][]> diffs = new ArrayList<int[][]>();
+      for (int i = 1; i < imageList.size(); ++i) {
+        BufferedImage cur = imageList.get(i);
+        BufferedImage prev = imageList.get(i - 1);
+        int width = cur.getWidth();
+        int height = cur.getHeight();
+        int[][] diff = new int[width][height];
+        for (int x = 0; x < width; ++x) {
+          for (int y = 0; y < height; ++y) {
+            int rgbCur = cur.getRGB(x, y);
+            int rc = (rgbCur >> 16) & 0x000000ff;
+            int gc = (rgbCur >> 8) & 0x000000ff;
+            int bc = rgbCur & 0x000000ff;
+
+            int rgbPrev = prev.getRGB(x, y);
+            int rp = (rgbPrev >> 16) & 0x000000ff;
+            int gp = (rgbPrev >> 8) & 0x000000ff;
+            int bp = rgbPrev & 0x000000ff;
+
+            int dr = rc - rp;
+            int dg = gc - gp;
+            int db = bc - bp;
+            dr *= dr;
+            dg *= dg;
+            db *= db;
+            //int avgDiff = (int)(Math.sqrt(dr + dg + db));
+            int avgDiff = dr + dg + db;
+            if (avgDiff < 0) avgDiff = 0;
+            if (avgDiff > 255) avgDiff = 255;
+            diff[x][y] = avgDiff;
+          }
+        }
+        diffs.add(diff);
+      }
+
+      /*for (int i = 1; i < imageList.size(); ++i) {
+        int[][] diff = diffs.get(i - 1);
+        BufferedImage cur = imageList.get(i);
+        int width = cur.getWidth();
+        int height = cur.getHeight();
+        long avgDiff = 0;
+        for (int x = 0; x < width; ++x) {
+          for (int y = 0; y < height; ++y) {
+            avgDiff += diff[x][y];
+          }
+        }
+        avgDiff /= (width * height);
+        System.out.println("avgDiff: " + avgDiff);
+        for (int x = 0; x < width; ++x) {
+          for (int y = 0; y < height; ++y) {
+            if (diff[x][y] > avgDiff) {
+              cur.setRGB(x, y, 0xff000000 | (int)(avgDiff << 8));
+            }
+          }
+        }
+      }*/
       while (true) {
         for (BufferedImage img : imageList) {
           lazyInit(img.getWidth(), img.getHeight());
