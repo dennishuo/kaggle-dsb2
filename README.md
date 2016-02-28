@@ -48,3 +48,11 @@ The lib/ files will need to be made available on java.library.path.
   -Pixel count vs circle-based?
 -How to do numerical integration of slices
   -Simpsons for quadratic interpolation instead of step or linear.
+
+
+## TODO
+
+-Remember to add handling of the mixed series like case 123
+  -Last number suffix appears to denote different slice locations which may overlap with other sax directories for the same case.
+  -Series number still the same within the mixed directory.
+  -Dedupe by SeriesNumber-SliceLocation?
