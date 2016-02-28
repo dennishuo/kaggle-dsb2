@@ -13,6 +13,7 @@ import org.opencv.core.Scalar;
 import org.opencv.features2d.FeatureDetector;
 import org.opencv.imgcodecs.Imgcodecs;
 
+import java.awt.Point;
 import java.awt.image.BufferedImage;
 import java.io.BufferedInputStream;
 import java.io.File;
@@ -20,11 +21,54 @@ import java.io.FileInputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Scanner;
 
 
 public class ImageProcessor {
+  /**
+   * For non-zero values in {@code diffs}, computes connected components.
+   */
+  public static List<ConnectedComponent> getScc(int[][] diffs) {
+    List<ConnectedComponent> scc = new ArrayList<ConnectedComponent>();
+
+    int width = diffs.length;
+    int height = diffs[0].length;
+    boolean[][] visited = new boolean[width][height];
+    for (int x = 1; x < width - 1; ++x) {
+      for (int y = 1; y < height - 1; ++y) {
+        if (visited[x][y]) continue;
+        if (diffs[x][y] != 0) {
+          // Start a BFS.
+          ConnectedComponent newComponent = new ConnectedComponent();
+          Point first = new Point(x, y);
+          LinkedList<Point> queue = new LinkedList<Point>();
+          queue.add(first);
+          newComponent.points.add(first);
+          visited[x][y] = true;
+          while (!queue.isEmpty()) {
+            Point cur = queue.removeFirst();
+            for (int dx = cur.x - 1; dx <= cur.x + 1; ++dx) {
+              for (int dy = cur.y - 1; dy <= cur.y + 1; ++dy) {
+                if (visited[dx][dy]) continue;
+                if (diffs[dx][dy] != 0) {
+                  Point neigh = new Point(dx, dy);
+                  queue.addLast(neigh);
+                  newComponent.points.add(neigh);
+                  visited[dx][dy] = true;
+                }
+              }
+            }
+          }
+          scc.add(newComponent);
+        }
+      }
+    }
+    System.out.println("Found " + scc.size() + " connected components.");
+    return scc;
+  }
+
   /**
    * Given {@code images} in chronological order, does color-clipping and then adjacent-image
    * diffing, differentiating between 0 to 1 and 1 to 0 types. Computes union of all the
@@ -42,8 +86,8 @@ public class ImageProcessor {
     for (int i = 1; i < images.size(); ++i) {
       BufferedImage cur = images.get(i).image;
       BufferedImage prev = images.get(i - 1).image;
-      for (int x = 0; x < width; ++x) {
-        for (int y = 0; y < height; ++y) {
+      for (int x = 1; x < width - 1; ++x) {
+        for (int y = 1; y < height - 1; ++y) {
           int curClipped = getClipped(cur.getRGB(x, y), threshold);
           int prevClipped = getClipped(prev.getRGB(x, y), threshold);
           if (curClipped == 0 && prevClipped != 0) {
@@ -63,6 +107,9 @@ public class ImageProcessor {
     while (removed) {
       removed = filterOutliers(ret.growDiffs, 5);
     }
+
+    ret.shrinkScc = getScc(ret.shrinkDiffs);
+    ret.growScc = getScc(ret.growDiffs);
     return ret;
   }
 

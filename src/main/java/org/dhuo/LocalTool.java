@@ -76,8 +76,10 @@ public class LocalTool {
 
       SeriesDiff combinedDiffs = ImageProcessor.getCombinedDiffs(parsedList);
       int[][] diffsToDraw = combinedDiffs.growDiffs;
+      List<ConnectedComponent> sccToDraw = combinedDiffs.growScc;
       if (args.length > 1 && "shrink".equals(args[1])){
         diffsToDraw = combinedDiffs.shrinkDiffs;
+        sccToDraw = combinedDiffs.shrinkScc;
       }
 
       // Clip to 4 colors
@@ -102,6 +104,14 @@ public class LocalTool {
             } else {
               cur.setRGB(x, y, 0xff000000 | (avg) | (avg << 8) | (avg << 16));
             }
+          }
+        }
+
+        for (int j = 0; j < sccToDraw.size(); ++j) {
+          ConnectedComponent cc = sccToDraw.get(j);
+          int rgb = ((j * 1234567) & 0x00ffffff) | 0xff000000;
+          for (Point p : cc.points) {
+            cur.setRGB(p.x, p.y, rgb);
           }
         }
       }
