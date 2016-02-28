@@ -41,6 +41,7 @@ class ImagePanel extends JPanel {
 
 public class LocalTool {
   static ImagePanel panel = null;
+  static ImagePanel rawPanel = null;
 
   /**
    * Initializes {@code panel} in a new popup jframe if it hasn't already been done. Otherwise,
@@ -49,13 +50,21 @@ public class LocalTool {
   public static void lazyInit(int width, int height) throws Exception {
     if (panel != null) return;
 
-    JFrame frame = new JFrame("DICOM Tool");
+    JFrame frame = new JFrame("Kaggle DSB - Annotated");
     frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
     panel = new ImagePanel();
     panel.setPreferredSize(new Dimension(width, height));
     frame.getContentPane().add(panel);
     frame.pack();
     frame.setVisible(true);
+
+    JFrame frame2 = new JFrame("Kaggle DSB - Raw");
+    frame2.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+    rawPanel = new ImagePanel();
+    rawPanel.setPreferredSize(new Dimension(width, height));
+    frame2.getContentPane().add(rawPanel);
+    frame2.pack();
+    frame2.setVisible(true);
   }
 
   public static void main(String[] args) throws Exception {
@@ -65,9 +74,12 @@ public class LocalTool {
       Arrays.sort(files);
       List<ParsedImage> parsedList = new ArrayList<ParsedImage>();
       List<BufferedImage> imageList = new ArrayList<BufferedImage>();
+      List<BufferedImage> rawImageList = new ArrayList<BufferedImage>();
       for (File input : files) {
         DICOM dicom = new DICOM(new BufferedInputStream(new FileInputStream(input)));
         dicom.run(input.getName());
+
+        rawImageList.add(ImageProcessor.getRawImage(dicom));
         ParsedImage parsed = ImageProcessor.getProcessedImage(dicom);
         parsedList.add(parsed);
         BufferedImage display = parsed.image;
@@ -205,9 +217,12 @@ public class LocalTool {
         }
       }*/
       while (true) {
-        for (BufferedImage img : imageList) {
+        for (int i = 0; i < imageList.size(); ++i) {
+          BufferedImage img = imageList.get(i);
+          BufferedImage raw = rawImageList.get(i);
           lazyInit(img.getWidth(), img.getHeight());
           panel.setDisplay(img);
+          rawPanel.setDisplay(raw);
           Thread.sleep(100);
         }
       }
@@ -216,6 +231,7 @@ public class LocalTool {
       dicom.run(inputFile.getName());
       System.out.println("Title: " + dicom.getTitle());
       System.out.println(dicom.getInfoProperty());
+      BufferedImage rawImage = ImageProcessor.getRawImage(dicom);
       ParsedImage parsed = ImageProcessor.getProcessedImage(dicom);
       BufferedImage display = parsed.image;
       int width = display.getWidth();
@@ -227,6 +243,7 @@ public class LocalTool {
       System.out.println("Parsed pixelSpacingY: " + parsed.pixelSpacingY);
       lazyInit(width, height);
       panel.setDisplay(display);
+      rawPanel.setDisplay(rawImage);
     }
   }
 }

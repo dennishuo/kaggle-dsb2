@@ -314,6 +314,16 @@ public class ImageProcessor {
     return removedAnything;
   }
 
+  public static BufferedImage getRawImage(DICOM dicom) throws Exception {
+    BufferedImage baseImage = dicom.getProcessor().getBufferedImage();
+    int width = baseImage.getWidth();
+    int height = baseImage.getHeight();
+
+    BufferedImage display = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+    display.getGraphics().drawImage(baseImage, 0, 0, null);
+    return display;
+  }
+
   public static ParsedImage getProcessedImage(DICOM dicom) throws Exception {
    /* new GaussianBlur().blur(dicom.getProcessor(), 10.0);
     BackgroundSubtracter subtractor = new BackgroundSubtracter();
