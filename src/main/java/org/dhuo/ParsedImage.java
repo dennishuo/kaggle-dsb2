@@ -8,6 +8,7 @@ import java.awt.image.BufferedImage;
 public class ParsedImage {
   public BufferedImage image;
   public double sliceLocation;
+  public double sliceThickness;
   public double pixelSpacingX;
   public double pixelSpacingY;
 }

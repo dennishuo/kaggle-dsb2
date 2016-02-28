@@ -349,6 +349,8 @@ public class ImageProcessor {
       String line = scan.nextLine();
       if (line.indexOf("Slice Location") != -1) {
         toReturn.sliceLocation = Double.parseDouble(line.split(":")[1].trim());
+      } else if (line.indexOf("Slice Thickness") != -1) {
+        toReturn.sliceThickness = Double.parseDouble(line.split(":")[1].trim());
       } else if (line.indexOf("Pixel Spacing") != -1) {
         String token = line.split(":")[1].trim();
         String[] parts = token.split("\\\\");
