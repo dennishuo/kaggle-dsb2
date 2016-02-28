@@ -58,33 +58,29 @@ public class LocalTool {
     frame.setVisible(true);
   }
 
-  public static BufferedImage getProcessedImage(DICOM dicom) throws Exception {
-    ParsedImage parsed = ImageProcessor.getProcessedImage(dicom);
-    BufferedImage baseImage = parsed.image;
-    int width  = baseImage.getWidth();
-    int height  = baseImage.getHeight();
-    BufferedImage display = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-    Graphics g = display.getGraphics();
-    g.drawImage(baseImage, 0, 0, null);
-    g.setColor(Color.GREEN);
-    //g.drawString(dicom.getTitle(), 10, 20);
-    //g.drawString("SliceLocation: " + parsed.sliceLocation, 10, 35);
-    return display;
-  }
-
   public static void main(String[] args) throws Exception {
     File inputFile = new File(args[0]);
     if (inputFile.isDirectory()) {
       File[] files = inputFile.listFiles();
       Arrays.sort(files);
+      List<ParsedImage> parsedList = new ArrayList<ParsedImage>();
       List<BufferedImage> imageList = new ArrayList<BufferedImage>();
       for (File input : files) {
         DICOM dicom = new DICOM(new BufferedInputStream(new FileInputStream(input)));
         dicom.run(input.getName());
-        BufferedImage display = getProcessedImage(dicom);
+        ParsedImage parsed = ImageProcessor.getProcessedImage(dicom);
+        parsedList.add(parsed);
+        BufferedImage display = parsed.image;
         imageList.add(display);
       }
 
+      SeriesDiff combinedDiffs = ImageProcessor.getCombinedDiffs(parsedList);
+      int[][] diffsToDraw = combinedDiffs.growDiffs;
+      if (args.length > 1 && "shrink".equals(args[1])){
+        diffsToDraw = combinedDiffs.shrinkDiffs;
+      }
+
+      // Clip to 4 colors
       for (int i = 0; i < imageList.size(); ++i) {
         BufferedImage cur = imageList.get(i);
         int width = cur.getWidth();
@@ -101,13 +97,17 @@ public class LocalTool {
             avg /= (256 / numColors);
             avg *= 256 / numColors;
             if (avg > 255) avg = 255;
-            cur.setRGB(x, y, 0xff000000 | (avg) | (avg << 8) | (avg << 16));
+            if (diffsToDraw[x][y] != 0) {
+              cur.setRGB(x, y, diffsToDraw[x][y]);
+            } else {
+              cur.setRGB(x, y, 0xff000000 | (avg) | (avg << 8) | (avg << 16));
+            }
           }
         }
       }
 
       // Try to diff consecutive images.
-      List<int[][]> diffs = new ArrayList<int[][]>();
+      /*List<int[][]> diffs = new ArrayList<int[][]>();
       for (int i = 1; i < imageList.size(); ++i) {
         BufferedImage cur = imageList.get(i);
         BufferedImage prev = imageList.get(i - 1);
@@ -169,7 +169,7 @@ public class LocalTool {
             }
           }
         }
-      }
+      }*/
       while (true) {
         for (BufferedImage img : imageList) {
           lazyInit(img.getWidth(), img.getHeight());
@@ -182,7 +182,7 @@ public class LocalTool {
       dicom.run(inputFile.getName());
       System.out.println("Title: " + dicom.getTitle());
       System.out.println(dicom.getInfoProperty());
-      BufferedImage display = getProcessedImage(dicom);
+      BufferedImage display = ImageProcessor.getProcessedImage(dicom).image;
       int width = display.getWidth();
       int height = display.getHeight();
       System.out.println("width: " + width);
