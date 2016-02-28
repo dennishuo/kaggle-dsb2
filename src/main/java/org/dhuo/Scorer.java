@@ -94,7 +94,7 @@ public class Scorer {
         diaScore += err;
       }
       finalScore += diaScore;
-      System.out.format("%s: %f %f\n", caseId, sysScore, diaScore);
+      System.out.format("%s: %f %f\n", caseId, sysScore / 600, diaScore / 600);
     }
     finalScore /= 600 * caseIds.size() * 2;
     System.out.println("Final score: " + finalScore);

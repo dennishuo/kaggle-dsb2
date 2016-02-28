@@ -37,3 +37,14 @@ The lib/ files will need to be made available on java.library.path.
 
     mvn clean package
     java -cp lib/ij.jar:target/kaggle-dsb2-1.0.jar org.dhuo.LocalTool ../data/250/study/sax_6
+
+## Areas of investigation
+
+-Given prediction and certainty of prediction, how to arrange shape of CDF
+-How to determine location of the LV
+  -Static single-image
+  -Diffs across timeseries images
+-How to measure the area of LV in a slice
+  -Pixel count vs circle-based?
+-How to do numerical integration of slices
+  -Simpsons for quadratic interpolation instead of step or linear.
