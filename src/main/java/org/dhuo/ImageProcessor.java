@@ -55,9 +55,14 @@ public class ImageProcessor {
       }
     }
 
-    filterOutliers(ret.shrinkDiffs, 5);
-    filterOutliers(ret.growDiffs, 5);
-
+    boolean removed = true;
+    while (removed) {
+      removed = filterOutliers(ret.shrinkDiffs, 5);
+    }
+    removed = true;
+    while (removed) {
+      removed = filterOutliers(ret.growDiffs, 5);
+    }
     return ret;
   }
 
@@ -77,11 +82,14 @@ public class ImageProcessor {
    * {@code diffs} is expeced to be binary; 0 or some other RGB value, so that we can efficiently
    * compute "percentile" with a simple count of zeros. Also, doesn't ever go from off to on, only
    * goes from on to off. The numRequiredNeighbors includes the central pixel being filtered.
+   *
+   * @return true if anything was removed at all.
    */
-  public static void filterOutliers(int[][] diffs, int numRequiredNeighbors) {
+  public static boolean filterOutliers(int[][] diffs, int numRequiredNeighbors) {
     int width = diffs.length;
     int height = diffs[0].length;
     boolean[][] toRemove = new boolean[width][height];
+    boolean removedAnything = false;
     for (int x = 1; x < width - 1; ++x) {
       for (int y = 1; y < height - 1; ++y) {
         // Skip non-active pixels.
@@ -94,6 +102,7 @@ public class ImageProcessor {
         }
         if (count < numRequiredNeighbors) {
           toRemove[x][y] = true;
+          removedAnything = true;
         }
       }
     }
@@ -104,6 +113,7 @@ public class ImageProcessor {
         }
       }
     }
+    return removedAnything;
   }
 
   public static ParsedImage getProcessedImage(DICOM dicom) throws Exception {
