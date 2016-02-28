@@ -61,6 +61,7 @@ public class ImageProcessor {
               }
             }
           }
+          newComponent.computeStats();
           scc.add(newComponent);
         }
       }

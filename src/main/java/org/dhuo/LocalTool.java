@@ -113,6 +113,13 @@ public class LocalTool {
           for (Point p : cc.points) {
             cur.setRGB(p.x, p.y, rgb);
           }
+          cur.getGraphics().setColor(Color.WHITE);
+          cur.getGraphics().drawLine(
+              (cc.xmin + cc.xmax) / 2, cc.ymin, 
+              (cc.xmin + cc.xmax) / 2, cc.ymax);
+          cur.getGraphics().drawLine(
+              cc.xmin, (cc.ymin + cc.ymax) / 2,
+              cc.xmax, (cc.ymin + cc.ymax) / 2);
         }
       }
 
