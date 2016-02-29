@@ -57,3 +57,4 @@ The lib/ files will need to be made available on java.library.path.
   -Series number still the same within the mixed directory.
   -Dedupe by SeriesNumber-SliceLocation?
 -Maybe use niblack instead of naive luminosity threshold for binarization
+-At least use dynamic threshold per image if not adaptive dynamic like niblack.

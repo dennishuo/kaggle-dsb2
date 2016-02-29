@@ -64,9 +64,9 @@ public class DistribTool {
       public String call(String casePath) throws Exception {
         Path studyDir = new Path(casePath, "study");
         FileSystem fs = studyDir.getFileSystem(new Configuration());
-        if (!fs.exists(studyDir)) {
+        /*if (!fs.exists(studyDir)) {
           throw new Exception("Failed to find /study dir in " + casePath);
-        }
+        }*/
 
         FileStatus[] series = fs.listStatus(studyDir);
         List<Path> saxPaths = new ArrayList<Path>();
