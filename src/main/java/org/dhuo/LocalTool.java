@@ -50,21 +50,22 @@ public class LocalTool {
   public static void lazyInit(int width, int height) throws Exception {
     if (panel != null) return;
 
-    JFrame frame = new JFrame("Kaggle DSB - Annotated");
+    JFrame frame = new JFrame("Kaggle DSB");
     frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+    JPanel outerPanel = new JPanel();
+    outerPanel.setPreferredSize(new Dimension(width * 2 + 20, height + 10));
+
     panel = new ImagePanel();
     panel.setPreferredSize(new Dimension(width, height));
-    frame.getContentPane().add(panel);
-    frame.pack();
-    frame.setVisible(true);
-
-    JFrame frame2 = new JFrame("Kaggle DSB - Raw");
-    frame2.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
     rawPanel = new ImagePanel();
     rawPanel.setPreferredSize(new Dimension(width, height));
-    frame2.getContentPane().add(rawPanel);
-    frame2.pack();
-    frame2.setVisible(true);
+
+    outerPanel.add(panel);
+    outerPanel.add(rawPanel);
+
+    frame.getContentPane().add(outerPanel);
+    frame.pack();
+    frame.setVisible(true);
   }
 
   public static void main(String[] args) throws Exception {
@@ -78,6 +79,8 @@ public class LocalTool {
       for (File input : files) {
         DICOM dicom = new DICOM(new BufferedInputStream(new FileInputStream(input)));
         dicom.run(input.getName());
+        System.out.println("Title: " + dicom.getTitle());
+        System.out.println(dicom.getInfoProperty());
 
         rawImageList.add(ImageProcessor.getRawImage(dicom));
         ParsedImage parsed = ImageProcessor.getProcessedImage(dicom);
@@ -238,7 +241,9 @@ public class LocalTool {
       int height = display.getHeight();
       System.out.println("width: " + width);
       System.out.println("height: " + height);
+      System.out.println("Parsed seriesNumber: " + parsed.seriesNumber);
       System.out.println("Parsed sliceLocation: " + parsed.sliceLocation);
+      System.out.println("Parsed triggerTime: " + parsed.triggerTime);
       System.out.println("Parsed pixelSpacingX: " + parsed.pixelSpacingX);
       System.out.println("Parsed pixelSpacingY: " + parsed.pixelSpacingY);
       lazyInit(width, height);

@@ -351,6 +351,10 @@ public class ImageProcessor {
         toReturn.sliceLocation = Double.parseDouble(line.split(":")[1].trim());
       } else if (line.indexOf("Slice Thickness") != -1) {
         toReturn.sliceThickness = Double.parseDouble(line.split(":")[1].trim());
+      } else if (line.indexOf("Series Number") != -1) {
+        toReturn.seriesNumber = Integer.parseInt(line.split(":")[1].trim());
+      } else if (line.indexOf("Trigger Time") != -1) {
+        toReturn.triggerTime = Double.parseDouble(line.split(":")[1].trim());
       } else if (line.indexOf("Pixel Spacing") != -1) {
         String token = line.split(":")[1].trim();
         String[] parts = token.split("\\\\");
