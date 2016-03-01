@@ -38,6 +38,12 @@ The lib/ files will need to be made available on java.library.path.
     mvn clean package
     java -cp lib/ij.jar:target/kaggle-dsb2-1.0.jar org.dhuo.LocalTool ../data/250/study/sax_6
 
+
+## Running on Dataproc
+
+    # Due to DICOM.java unwisely using "private static Properties dictionary", need spark.executor.cores=1 and to adjust memory accordingly.
+    gcloud dataproc jobs submit spark --cluster dhuo-dcm2 --properties spark.executor.cores=1,spark.executor.memory=2g --jars lib/ij.jar,target/kaggle-dsb2-1.0.jar --class org.dhuo.DistribTool gs://dhuo-kaggle-dsb2/train_data/train
+
 ## Areas of investigation
 
 -Given prediction and certainty of prediction, how to arrange shape of CDF

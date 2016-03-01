@@ -120,23 +120,37 @@ public class DistribTool {
               combinedDiffs.shrinkScc, parsedList.get(0));
           ConnectedComponent chosenGrow = ImageProcessor.chooseScc(
               combinedDiffs.growScc, parsedList.get(0));
-          ConnectedComponent toUse = chosenShrink;
-          if (toUse == null) {
-            toUse = chosenGrow;
+          double sysVolShrink = 0;
+          double diaVolShrink = 0;
+          if (chosenShrink != null) {
+            sysVolShrink = ImageProcessor.computeAreaSystole(chosenShrink, parsedList.get(0));
+            diaVolShrink = ImageProcessor.computeAreaDiastole(chosenShrink, parsedList.get(0));
+          } else {
+            // Fallback to global averages from training set.
+            sysVolShrink = 71.96 * 1000 / saxPaths.size() / parsedList.get(0).sliceThickness;
+            diaVolShrink = 165.87 * 1000 / saxPaths.size() / parsedList.get(0).sliceThickness;
           }
-          if (toUse != null) {
-            double sysVol = ImageProcessor.computeAreaSystole(toUse, parsedList.get(0));
-            double diaVol = ImageProcessor.computeAreaDiastole(toUse, parsedList.get(0));
-
-            sysVol *= parsedList.get(0).sliceThickness;
-            diaVol *= parsedList.get(0).sliceThickness;
-
-            sysVol /= 1000;
-            diaVol /= 1000;
-
-            totalVolumeSys += sysVol;
-            totalVolumeDia += diaVol;
+          double sysVolGrow = 0;
+          double diaVolGrow = 0;
+          if (chosenGrow != null) {
+            sysVolGrow = ImageProcessor.computeAreaSystole(chosenGrow, parsedList.get(0));
+            diaVolGrow = ImageProcessor.computeAreaDiastole(chosenGrow, parsedList.get(0));
+          } else {
+            // Fallback to global averages from training set.
+            sysVolGrow = 71.96 * 1000 / saxPaths.size() / parsedList.get(0).sliceThickness;
+            diaVolGrow = 165.87 * 1000 / saxPaths.size() / parsedList.get(0).sliceThickness;
           }
+          double sysVol = (sysVolShrink + sysVolGrow) / 2;
+          double diaVol = (diaVolShrink + diaVolGrow) / 2;
+
+          sysVol *= parsedList.get(0).sliceThickness;
+          diaVol *= parsedList.get(0).sliceThickness;
+
+          sysVol /= 1000;
+          diaVol /= 1000;
+
+          totalVolumeSys += sysVol;
+          totalVolumeDia += diaVol;
         }
         return caseId + "," + totalVolumeSys + "," + totalVolumeDia;
       }
