@@ -26,6 +26,7 @@ import java.io.FileOutputStream;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Scanner;
 import java.util.UUID;
@@ -48,6 +49,7 @@ public class DistribTool {
         .setAppName("org.dhuo.DistribTool");
     JavaSparkContext sc = new JavaSparkContext(conf);
 
+    // Get initial list of caseIds directories.
     System.out.println("Looking for case ids...");
     Path basePath = new Path(args[0]);
     FileStatus[] list = basePath.getFileSystem(new Configuration()).listStatus(basePath);
@@ -59,6 +61,9 @@ public class DistribTool {
       }
     }
     System.out.println("Found " + casePaths.size() + " directories inside " + basePath + ".");
+
+    // Repartition to spread out the necessary list calls, and then for each caseId list all sax
+    // directories.
     JavaRDD<String> casePathsRdd = sc.parallelize(casePaths).repartition(casePaths.size());
     JavaPairRDD<Integer, String> saxPathsRdd = casePathsRdd.flatMapToPair(
         new PairFlatMapFunction<String, Integer, String>() {
@@ -89,6 +94,8 @@ public class DistribTool {
     saxPathsRdd.cache();
     long saxPathsRddCount = saxPathsRdd.count();
     System.out.println("Total of " + saxPathsRddCount + " saxPaths");
+
+    // For each saxPath, list all dcmPaths.
     JavaPairRDD<Integer, String> dcmPathsRdd = saxPathsRdd.flatMapValues(
         new Function<String, Iterable<String>>() {
       @Override
@@ -107,9 +114,12 @@ public class DistribTool {
     });
     dcmPathsRdd.cache();
     System.out.println("Total of " + dcmPathsRdd.count() + " dcmPaths.");
+
+    // Repartition to number of saxPaths instead of num caseIds for better balance.
     dcmPathsRdd = dcmPathsRdd.repartition((int)saxPathsRddCount);
 
-    // Keys here are caseId/seriesNumber_sliceLocation
+    // Decode all the dcm files and stash them in byte arrays; translate into new composite
+    // keys of the form caseId/seriesNumber_sliceLocation.
     JavaPairRDD<String, byte[]> parsedImagesRdd = dcmPathsRdd.mapToPair(
         new PairFunction<Tuple2<Integer, String>, String, byte[]>() {
       @Override
@@ -134,8 +144,76 @@ public class DistribTool {
     demuxedSaxRdd.cache();
     long demuxedSaxRddCount = demuxedSaxRdd.count();
     System.out.println("Total demuxed sax count: " + demuxedSaxRddCount);
-    for (Tuple2<String, Iterable<byte[]>> tup : demuxedSaxRdd.collect()) {
-      System.out.println(tup._1());
+
+    // Repartition to number of actual distinct sax series, the finest grain of work where
+    // each task can still do processing across the timeseries.
+    demuxedSaxRdd = demuxedSaxRdd.repartition((int)demuxedSaxRddCount);
+
+    // Map back down to caseId keys and values which are computed results
+    JavaPairRDD<Integer, SeriesResult> seriesResultsRdd = demuxedSaxRdd.mapToPair(
+        new PairFunction<Tuple2<String, Iterable<byte[]>>, Integer, SeriesResult>() {
+      @Override
+      public Tuple2<Integer, SeriesResult> call(Tuple2<String, Iterable<byte[]>> seriesEntry)
+          throws Exception {
+        int caseId = Integer.parseInt(seriesEntry._1().split("/")[0]);
+
+        List<ParsedImage> parsedList = new ArrayList<ParsedImage>();
+        for (byte[] imageBuf : seriesEntry._2()) {
+          parsedList.add(ParsedImage.fromBytes(imageBuf));
+        }
+        Collections.sort(parsedList, new Comparator<ParsedImage>() {
+          @Override
+          public int compare(ParsedImage a, ParsedImage b) {
+            return Double.compare(a.triggerTime, b.triggerTime);
+          }
+        });
+        SeriesDiff combinedDiffs = ImageProcessor.getCombinedDiffs(parsedList);
+        ConnectedComponent chosenShrink = ImageProcessor.chooseScc(
+            combinedDiffs.shrinkScc, parsedList.get(0));
+        ConnectedComponent chosenGrow = ImageProcessor.chooseScc(
+            combinedDiffs.growScc, parsedList.get(0));
+        double sysVolShrink = 0;
+        double diaVolShrink = 0;
+        if (chosenShrink != null) {
+          sysVolShrink = ImageProcessor.computeAreaSystole(chosenShrink, parsedList.get(0));
+          diaVolShrink = ImageProcessor.computeAreaDiastole(chosenShrink, parsedList.get(0));
+        }
+        double sysVolGrow = 0;
+        double diaVolGrow = 0;
+        if (chosenGrow != null) {
+          sysVolGrow = ImageProcessor.computeAreaSystole(chosenGrow, parsedList.get(0));
+          diaVolGrow = ImageProcessor.computeAreaDiastole(chosenGrow, parsedList.get(0));
+        }
+
+        SeriesResult result = new SeriesResult();
+        result.seriesNumber = parsedList.get(0).seriesNumber;
+        result.sliceLocation = parsedList.get(0).sliceLocation;
+        result.sliceThickness = parsedList.get(0).sliceThickness;
+        result.sysVolShrink = sysVolShrink;
+        result.diaVolShrink = diaVolShrink;
+        result.sysVolGrow = sysVolGrow;
+        result.diaVolGrow = diaVolGrow;
+        SeriesResult res = result;
+        return new Tuple2<Integer, SeriesResult>(caseId, result);
+      }
+    });
+    JavaPairRDD<Integer, Iterable<SeriesResult>> resultsByCaseRdd = seriesResultsRdd.groupByKey();
+    for (Tuple2<Integer, Iterable<SeriesResult>> tup : resultsByCaseRdd.collect()) {
+      double totalVolumeSys = 0;
+      double totalVolumeDia = 0;
+      for (SeriesResult res : tup._2()) {
+        if (res.sysVolShrink > 0) {
+          totalVolumeSys += res.sysVolShrink * res.sliceThickness / 1000;
+        } else if (res.sysVolGrow > 0) {
+          totalVolumeSys += res.sysVolGrow * res.sliceThickness / 1000;
+        }
+        if (res.diaVolShrink > 0) {
+          totalVolumeDia += res.diaVolShrink * res.sliceThickness / 1000;
+        } else if (res.diaVolGrow > 0) {
+          totalVolumeDia += res.diaVolGrow * res.sliceThickness / 1000;
+        }
+      }
+      System.out.println(tup._1() + "," + totalVolumeSys + "," + totalVolumeDia);
     }
 
     /*for (Tuple2<Integer, String> tup : dcmPathsRdd.collect()) {

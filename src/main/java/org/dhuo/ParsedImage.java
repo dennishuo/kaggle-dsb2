@@ -30,13 +30,17 @@ public class ParsedImage {
   public byte[] toBytes() throws IOException {
     ByteArrayOutputStream boutBuf = new ByteArrayOutputStream();
     DataOutputStream bout = new DataOutputStream(boutBuf);
-    ImageIO.write(image, "png", bout);
     bout.writeInt(seriesNumber);
     bout.writeDouble(sliceLocation);
     bout.writeDouble(triggerTime);
     bout.writeDouble(sliceThickness);
     bout.writeDouble(pixelSpacingX);
     bout.writeDouble(pixelSpacingY);
+
+    // NB: Important that the image serialization comes *last* otherwise deserialization
+    // apparently doesn't have strict length headers and is happy to screw up the image read
+    // stream and thus corrupt the other fields when deserializing.
+    ImageIO.write(image, "png", bout);
     bout.flush();
     bout.close();
     return boutBuf.toByteArray();
@@ -45,13 +49,13 @@ public class ParsedImage {
   public static ParsedImage fromBytes(byte[] buf) throws IOException {
     ParsedImage ret = new ParsedImage();
     DataInputStream bin = new DataInputStream(new ByteArrayInputStream(buf));
-    ret.image = ImageIO.read(bin);
     ret.seriesNumber = bin.readInt();
     ret.sliceLocation = bin.readDouble();
     ret.triggerTime = bin.readDouble();
     ret.sliceThickness = bin.readDouble();
     ret.pixelSpacingX = bin.readDouble();
     ret.pixelSpacingY = bin.readDouble();
+    ret.image = ImageIO.read(bin);
     return ret;
   }
 }
