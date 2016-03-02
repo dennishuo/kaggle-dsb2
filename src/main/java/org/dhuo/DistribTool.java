@@ -221,23 +221,9 @@ public class DistribTool {
     }
 
     // Compute volumes.
-    for (Integer caseId : sortedResults.keySet()) {
-      List<SeriesResult> seriesResultList = sortedResults.get(caseId);
-      double totalVolumeSys = 0;
-      double totalVolumeDia = 0;
-      for (SeriesResult res : seriesResultList) {
-        if (res.sysVolShrink > 0) {
-          totalVolumeSys += res.sysVolShrink * res.sliceThickness / 1000;
-        } else if (res.sysVolGrow > 0) {
-          totalVolumeSys += res.sysVolGrow * res.sliceThickness / 1000;
-        }
-        if (res.diaVolShrink > 0) {
-          totalVolumeDia += res.diaVolShrink * res.sliceThickness / 1000;
-        } else if (res.diaVolGrow > 0) {
-          totalVolumeDia += res.diaVolGrow * res.sliceThickness / 1000;
-        }
-      }
-      System.out.println(caseId + "," + totalVolumeSys + "," + totalVolumeDia);
+    List<CaseSummary> summaries = Reconstructor.computeCaseSummaries(sortedResults);
+    for (CaseSummary summary : summaries) {
+      System.out.println(summary.caseId + "," + summary.totalVolumeSys + "," + summary.totalVolumeDia);
     }
 
     // Optionally save out the series results so that we can refine the volume
@@ -257,110 +243,6 @@ public class DistribTool {
       }
       fout.close();
     }
-
-    /*for (Tuple2<Integer, String> tup : dcmPathsRdd.collect()) {
-      System.out.println(tup._1() + ": " + tup._2());
-    }*/
-
-//    JavaRDD<String> answers = casePathsRdd.map(new Function<String, String>() {
-//      @Override
-//      public String call(String casePath) throws Exception {
-//        Path studyDir = new Path(casePath, "study");
-//        FileSystem fs = studyDir.getFileSystem(new Configuration());
-//        /*if (!fs.exists(studyDir)) {
-//          throw new Exception("Failed to find /study dir in " + casePath);
-//        }*/
-//
-//        FileStatus[] series = fs.listStatus(studyDir);
-//        List<Path> saxPaths = new ArrayList<Path>();
-//        for (FileStatus stat : series) {
-//          if (stat.getPath().getName().startsWith("sax_")) {
-//            System.out.println("Found saxPath: " + stat.getPath());
-//            saxPaths.add(stat.getPath());
-//          }
-//        }
-//        if (saxPaths.size() == 0) {
-//          throw new Exception("Found 0 saxPaths for " + casePath);
-//        }
-//
-//        // TODO(dhuo): Reorganize file series by series ids and slice locations to properly
-//        // multiplex mixed streams like case 123.
-//        String caseId = new Path(casePath).getName();
-//
-//        // TODO(dhuo): As a quick first pass, we'll just add up all available SAX slices
-//        // which produce any calculated area at all, and use slice thickness.
-//        double totalVolumeSys = 0.0;
-//        double totalVolumeDia = 0.0;
-//
-//        for (Path saxPath : saxPaths) {
-//          System.out.println("Processing saxPath: " + saxPath);
-//          FileStatus[] dcmFiles = fs.listStatus(saxPath);
-//          List<Path> dcmList = new ArrayList<Path>();
-//          for (FileStatus stat : dcmFiles) {
-//            if (stat.getPath().getName().endsWith(".dcm")) {
-//              dcmList.add(stat.getPath());
-//            }
-//          }
-//          Collections.sort(dcmList);
-//
-//          List<ParsedImage> parsedList = new ArrayList<ParsedImage>();
-//          for (Path dcmPath : dcmList) {
-//            DICOM dicom = new DICOM(new BufferedInputStream(fs.open(dcmPath)));
-//            dicom.run(caseId + "_" + saxPath.getName() + "_" + dcmPath.getName());
-//            try {
-//              ParsedImage parsed = ImageProcessor.getProcessedImage(dicom);
-//              parsedList.add(parsed);
-//            } catch (Exception e) {
-//              throw new Exception("While processing path: " + dcmPath, e);
-//            }
-//          }
-//          if (parsedList.size() == 0) {
-//            throw new Exception("Got 0 images inside saxPath: " + saxPath);
-//          }
-//
-//          SeriesDiff combinedDiffs = ImageProcessor.getCombinedDiffs(parsedList);
-//          ConnectedComponent chosenShrink = ImageProcessor.chooseScc(
-//              combinedDiffs.shrinkScc, parsedList.get(0));
-//          ConnectedComponent chosenGrow = ImageProcessor.chooseScc(
-//              combinedDiffs.growScc, parsedList.get(0));
-//          double sysVolShrink = 0;
-//          double diaVolShrink = 0;
-//          if (chosenShrink != null) {
-//            sysVolShrink = ImageProcessor.computeAreaSystole(chosenShrink, parsedList.get(0));
-//            diaVolShrink = ImageProcessor.computeAreaDiastole(chosenShrink, parsedList.get(0));
-//          } else {
-//            // Fallback to global averages from training set.
-//            sysVolShrink = 71.96 * 1000 / saxPaths.size() / parsedList.get(0).sliceThickness;
-//            diaVolShrink = 165.87 * 1000 / saxPaths.size() / parsedList.get(0).sliceThickness;
-//          }
-//          double sysVolGrow = 0;
-//          double diaVolGrow = 0;
-//          if (chosenGrow != null) {
-//            sysVolGrow = ImageProcessor.computeAreaSystole(chosenGrow, parsedList.get(0));
-//            diaVolGrow = ImageProcessor.computeAreaDiastole(chosenGrow, parsedList.get(0));
-//          } else {
-//            // Fallback to global averages from training set.
-//            sysVolGrow = 71.96 * 1000 / saxPaths.size() / parsedList.get(0).sliceThickness;
-//            diaVolGrow = 165.87 * 1000 / saxPaths.size() / parsedList.get(0).sliceThickness;
-//          }
-//          double sysVol = (sysVolShrink + sysVolGrow) / 2;
-//          double diaVol = (diaVolShrink + diaVolGrow) / 2;
-//
-//          sysVol *= parsedList.get(0).sliceThickness;
-//          diaVol *= parsedList.get(0).sliceThickness;
-//
-//          sysVol /= 1000;
-//          diaVol /= 1000;
-//
-//          totalVolumeSys += sysVol;
-//          totalVolumeDia += diaVol;
-//        }
-//        return caseId + "," + totalVolumeSys + "," + totalVolumeDia;
-//      }
-//    });
-//    for (String s : answers.collect()) {
-//      System.out.println(s);
-//    }
     sc.stop();
   }
 }
