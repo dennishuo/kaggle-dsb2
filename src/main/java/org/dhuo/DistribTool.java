@@ -13,6 +13,7 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.Function;
+import org.apache.spark.api.java.function.PairFlatMapFunction;
 import org.apache.spark.api.java.function.PairFunction;
 
 import scala.Tuple2;
@@ -59,105 +60,187 @@ public class DistribTool {
     }
     System.out.println("Found " + casePaths.size() + " directories inside " + basePath + ".");
     JavaRDD<String> casePathsRdd = sc.parallelize(casePaths).repartition(casePaths.size());
-    JavaRDD<String> answers = casePathsRdd.map(new Function<String, String>() {
+    JavaPairRDD<Integer, String> saxPathsRdd = casePathsRdd.flatMapToPair(
+        new PairFlatMapFunction<String, Integer, String>() {
       @Override
-      public String call(String casePath) throws Exception {
-        Path studyDir = new Path(casePath, "study");
+      public Iterable<Tuple2<Integer, String>> call(String casePath) throws Exception {
+        Path casePathObj = new Path(casePath);
+        Path studyDir = new Path(casePathObj, "study");
         FileSystem fs = studyDir.getFileSystem(new Configuration());
+        Integer caseId = Integer.parseInt(casePathObj.getName());
         /*if (!fs.exists(studyDir)) {
           throw new Exception("Failed to find /study dir in " + casePath);
         }*/
 
         FileStatus[] series = fs.listStatus(studyDir);
-        List<Path> saxPaths = new ArrayList<Path>();
+        List<Tuple2<Integer, String>> saxPaths = new ArrayList<Tuple2<Integer, String>>();
         for (FileStatus stat : series) {
           if (stat.getPath().getName().startsWith("sax_")) {
             System.out.println("Found saxPath: " + stat.getPath());
-            saxPaths.add(stat.getPath());
+            saxPaths.add(new Tuple2<Integer, String>(caseId, stat.getPath().toString()));
           }
         }
         if (saxPaths.size() == 0) {
           throw new Exception("Found 0 saxPaths for " + casePath);
         }
-
-        // TODO(dhuo): Reorganize file series by series ids and slice locations to properly
-        // multiplex mixed streams like case 123.
-        String caseId = new Path(casePath).getName();
-
-        // TODO(dhuo): As a quick first pass, we'll just add up all available SAX slices
-        // which produce any calculated area at all, and use slice thickness.
-        double totalVolumeSys = 0.0;
-        double totalVolumeDia = 0.0;
-
-        for (Path saxPath : saxPaths) {
-          System.out.println("Processing saxPath: " + saxPath);
-          FileStatus[] dcmFiles = fs.listStatus(saxPath);
-          List<Path> dcmList = new ArrayList<Path>();
-          for (FileStatus stat : dcmFiles) {
-            if (stat.getPath().getName().endsWith(".dcm")) {
-              dcmList.add(stat.getPath());
-            }
-          }
-          Collections.sort(dcmList);
-
-          List<ParsedImage> parsedList = new ArrayList<ParsedImage>();
-          for (Path dcmPath : dcmList) {
-            DICOM dicom = new DICOM(new BufferedInputStream(fs.open(dcmPath)));
-            dicom.run(caseId + "_" + saxPath.getName() + "_" + dcmPath.getName());
-            try {
-              ParsedImage parsed = ImageProcessor.getProcessedImage(dicom);
-              parsedList.add(parsed);
-            } catch (Exception e) {
-              throw new Exception("While processing path: " + dcmPath, e);
-            }
-          }
-          if (parsedList.size() == 0) {
-            throw new Exception("Got 0 images inside saxPath: " + saxPath);
-          }
-
-          SeriesDiff combinedDiffs = ImageProcessor.getCombinedDiffs(parsedList);
-          ConnectedComponent chosenShrink = ImageProcessor.chooseScc(
-              combinedDiffs.shrinkScc, parsedList.get(0));
-          ConnectedComponent chosenGrow = ImageProcessor.chooseScc(
-              combinedDiffs.growScc, parsedList.get(0));
-          double sysVolShrink = 0;
-          double diaVolShrink = 0;
-          if (chosenShrink != null) {
-            sysVolShrink = ImageProcessor.computeAreaSystole(chosenShrink, parsedList.get(0));
-            diaVolShrink = ImageProcessor.computeAreaDiastole(chosenShrink, parsedList.get(0));
-          } else {
-            // Fallback to global averages from training set.
-            sysVolShrink = 71.96 * 1000 / saxPaths.size() / parsedList.get(0).sliceThickness;
-            diaVolShrink = 165.87 * 1000 / saxPaths.size() / parsedList.get(0).sliceThickness;
-          }
-          double sysVolGrow = 0;
-          double diaVolGrow = 0;
-          if (chosenGrow != null) {
-            sysVolGrow = ImageProcessor.computeAreaSystole(chosenGrow, parsedList.get(0));
-            diaVolGrow = ImageProcessor.computeAreaDiastole(chosenGrow, parsedList.get(0));
-          } else {
-            // Fallback to global averages from training set.
-            sysVolGrow = 71.96 * 1000 / saxPaths.size() / parsedList.get(0).sliceThickness;
-            diaVolGrow = 165.87 * 1000 / saxPaths.size() / parsedList.get(0).sliceThickness;
-          }
-          double sysVol = (sysVolShrink + sysVolGrow) / 2;
-          double diaVol = (diaVolShrink + diaVolGrow) / 2;
-
-          sysVol *= parsedList.get(0).sliceThickness;
-          diaVol *= parsedList.get(0).sliceThickness;
-
-          sysVol /= 1000;
-          diaVol /= 1000;
-
-          totalVolumeSys += sysVol;
-          totalVolumeDia += diaVol;
-        }
-        return caseId + "," + totalVolumeSys + "," + totalVolumeDia;
+        return saxPaths;
       }
     });
-    for (String s : answers.collect()) {
-      System.out.println(s);
+    saxPathsRdd.cache();
+    long saxPathsRddCount = saxPathsRdd.count();
+    System.out.println("Total of " + saxPathsRddCount + " saxPaths");
+    JavaPairRDD<Integer, String> dcmPathsRdd = saxPathsRdd.flatMapValues(
+        new Function<String, Iterable<String>>() {
+      @Override
+      public Iterable<String> call(String saxPath) throws Exception {
+        Path saxPathObj = new Path(saxPath);
+        FileSystem fs = saxPathObj.getFileSystem(new Configuration());
+        FileStatus[] dcmFiles = fs.listStatus(saxPathObj);
+        List<String> dcmList = new ArrayList<String>();
+        for (FileStatus stat : dcmFiles) {
+          if (stat.getPath().getName().endsWith(".dcm")) {
+            dcmList.add(stat.getPath().toString());
+          }
+        }
+        return dcmList;
+      }
+    });
+    dcmPathsRdd.cache();
+    System.out.println("Total of " + dcmPathsRdd.count() + " dcmPaths.");
+    dcmPathsRdd = dcmPathsRdd.repartition((int)saxPathsRddCount);
+
+    // Keys here are caseId/seriesNumber_sliceLocation
+    JavaPairRDD<String, byte[]> parsedImagesRdd = dcmPathsRdd.mapToPair(
+        new PairFunction<Tuple2<Integer, String>, String, byte[]>() {
+      @Override
+      public Tuple2<String, byte[]> call(Tuple2<Integer, String> dcmEntry) throws Exception {
+        int caseId = dcmEntry._1();
+        Path dcmPath = new Path(dcmEntry._2());
+        FileSystem fs = dcmPath.getFileSystem(new Configuration());
+        DICOM dicom = new DICOM(new BufferedInputStream(fs.open(dcmPath)));
+        dicom.run(Path.getPathWithoutSchemeAndAuthority(dcmPath).toString());
+        ParsedImage parsed = null;
+        try {
+          parsed = ImageProcessor.getProcessedImage(dicom);
+        } catch (Exception e) {
+          throw new Exception("While processing path: " + dcmPath, e);
+        }
+        String uniqueId = String.format(
+            "%d/%d_%d", caseId, parsed.seriesNumber, Math.round(parsed.sliceLocation));
+        return new Tuple2<String, byte[]>(uniqueId, parsed.toBytes());
+      }
+    });
+    JavaPairRDD<String, Iterable<byte[]>> demuxedSaxRdd = parsedImagesRdd.groupByKey();
+    demuxedSaxRdd.cache();
+    long demuxedSaxRddCount = demuxedSaxRdd.count();
+    System.out.println("Total demuxed sax count: " + demuxedSaxRddCount);
+    for (Tuple2<String, Iterable<byte[]>> tup : demuxedSaxRdd.collect()) {
+      System.out.println(tup._1());
     }
+
+    /*for (Tuple2<Integer, String> tup : dcmPathsRdd.collect()) {
+      System.out.println(tup._1() + ": " + tup._2());
+    }*/
+
+//    JavaRDD<String> answers = casePathsRdd.map(new Function<String, String>() {
+//      @Override
+//      public String call(String casePath) throws Exception {
+//        Path studyDir = new Path(casePath, "study");
+//        FileSystem fs = studyDir.getFileSystem(new Configuration());
+//        /*if (!fs.exists(studyDir)) {
+//          throw new Exception("Failed to find /study dir in " + casePath);
+//        }*/
+//
+//        FileStatus[] series = fs.listStatus(studyDir);
+//        List<Path> saxPaths = new ArrayList<Path>();
+//        for (FileStatus stat : series) {
+//          if (stat.getPath().getName().startsWith("sax_")) {
+//            System.out.println("Found saxPath: " + stat.getPath());
+//            saxPaths.add(stat.getPath());
+//          }
+//        }
+//        if (saxPaths.size() == 0) {
+//          throw new Exception("Found 0 saxPaths for " + casePath);
+//        }
+//
+//        // TODO(dhuo): Reorganize file series by series ids and slice locations to properly
+//        // multiplex mixed streams like case 123.
+//        String caseId = new Path(casePath).getName();
+//
+//        // TODO(dhuo): As a quick first pass, we'll just add up all available SAX slices
+//        // which produce any calculated area at all, and use slice thickness.
+//        double totalVolumeSys = 0.0;
+//        double totalVolumeDia = 0.0;
+//
+//        for (Path saxPath : saxPaths) {
+//          System.out.println("Processing saxPath: " + saxPath);
+//          FileStatus[] dcmFiles = fs.listStatus(saxPath);
+//          List<Path> dcmList = new ArrayList<Path>();
+//          for (FileStatus stat : dcmFiles) {
+//            if (stat.getPath().getName().endsWith(".dcm")) {
+//              dcmList.add(stat.getPath());
+//            }
+//          }
+//          Collections.sort(dcmList);
+//
+//          List<ParsedImage> parsedList = new ArrayList<ParsedImage>();
+//          for (Path dcmPath : dcmList) {
+//            DICOM dicom = new DICOM(new BufferedInputStream(fs.open(dcmPath)));
+//            dicom.run(caseId + "_" + saxPath.getName() + "_" + dcmPath.getName());
+//            try {
+//              ParsedImage parsed = ImageProcessor.getProcessedImage(dicom);
+//              parsedList.add(parsed);
+//            } catch (Exception e) {
+//              throw new Exception("While processing path: " + dcmPath, e);
+//            }
+//          }
+//          if (parsedList.size() == 0) {
+//            throw new Exception("Got 0 images inside saxPath: " + saxPath);
+//          }
+//
+//          SeriesDiff combinedDiffs = ImageProcessor.getCombinedDiffs(parsedList);
+//          ConnectedComponent chosenShrink = ImageProcessor.chooseScc(
+//              combinedDiffs.shrinkScc, parsedList.get(0));
+//          ConnectedComponent chosenGrow = ImageProcessor.chooseScc(
+//              combinedDiffs.growScc, parsedList.get(0));
+//          double sysVolShrink = 0;
+//          double diaVolShrink = 0;
+//          if (chosenShrink != null) {
+//            sysVolShrink = ImageProcessor.computeAreaSystole(chosenShrink, parsedList.get(0));
+//            diaVolShrink = ImageProcessor.computeAreaDiastole(chosenShrink, parsedList.get(0));
+//          } else {
+//            // Fallback to global averages from training set.
+//            sysVolShrink = 71.96 * 1000 / saxPaths.size() / parsedList.get(0).sliceThickness;
+//            diaVolShrink = 165.87 * 1000 / saxPaths.size() / parsedList.get(0).sliceThickness;
+//          }
+//          double sysVolGrow = 0;
+//          double diaVolGrow = 0;
+//          if (chosenGrow != null) {
+//            sysVolGrow = ImageProcessor.computeAreaSystole(chosenGrow, parsedList.get(0));
+//            diaVolGrow = ImageProcessor.computeAreaDiastole(chosenGrow, parsedList.get(0));
+//          } else {
+//            // Fallback to global averages from training set.
+//            sysVolGrow = 71.96 * 1000 / saxPaths.size() / parsedList.get(0).sliceThickness;
+//            diaVolGrow = 165.87 * 1000 / saxPaths.size() / parsedList.get(0).sliceThickness;
+//          }
+//          double sysVol = (sysVolShrink + sysVolGrow) / 2;
+//          double diaVol = (diaVolShrink + diaVolGrow) / 2;
+//
+//          sysVol *= parsedList.get(0).sliceThickness;
+//          diaVol *= parsedList.get(0).sliceThickness;
+//
+//          sysVol /= 1000;
+//          diaVol /= 1000;
+//
+//          totalVolumeSys += sysVol;
+//          totalVolumeDia += diaVol;
+//        }
+//        return caseId + "," + totalVolumeSys + "," + totalVolumeDia;
+//      }
+//    });
+//    for (String s : answers.collect()) {
+//      System.out.println(s);
+//    }
     sc.stop();
   }
 }
