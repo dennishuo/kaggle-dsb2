@@ -28,7 +28,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Scanner;
+import java.util.TreeMap;
 import java.util.UUID;
 import javax.imageio.ImageIO;
 
@@ -39,8 +41,8 @@ import javax.imageio.ImageIO;
  */
 public class DistribTool {
   public static void main(String[] args) throws Exception {
-    if (args.length != 1) {
-      System.err.println("Usage: spark-submit kaggle-dsb2-1.0.jar <cases dir>");
+    if (args.length < 1) {
+      System.err.println("Usage: spark-submit kaggle-dsb2-1.0.jar <cases dir> [optional: seriesresult output]");
       System.exit(1);
     }
 
@@ -198,10 +200,32 @@ public class DistribTool {
       }
     });
     JavaPairRDD<Integer, Iterable<SeriesResult>> resultsByCaseRdd = seriesResultsRdd.groupByKey();
-    for (Tuple2<Integer, Iterable<SeriesResult>> tup : resultsByCaseRdd.collect()) {
+    List<Tuple2<Integer, Iterable<SeriesResult>>> collectedResults = resultsByCaseRdd.collect();
+
+    // Sort each list of slice-series by slice location, and place in a map by caseId that's easier
+    // to work with.
+    Map<Integer, List<SeriesResult>> sortedResults = new TreeMap<Integer, List<SeriesResult>>();
+    for (Tuple2<Integer, Iterable<SeriesResult>> tup : collectedResults) {
+      List<SeriesResult> resultList = new ArrayList<SeriesResult>();
+      for (SeriesResult res : tup._2()) {
+        resultList.add(res);
+      }
+      // Sort the list by sliceLocation.
+      Collections.sort(resultList, new Comparator<SeriesResult>() {
+        @Override
+        public int compare(SeriesResult a, SeriesResult b) {
+          return Double.compare(a.sliceLocation, b.sliceLocation);
+        }
+      });
+      sortedResults.put(tup._1(), resultList);
+    }
+
+    // Compute volumes.
+    for (Integer caseId : sortedResults.keySet()) {
+      List<SeriesResult> seriesResultList = sortedResults.get(caseId);
       double totalVolumeSys = 0;
       double totalVolumeDia = 0;
-      for (SeriesResult res : tup._2()) {
+      for (SeriesResult res : seriesResultList) {
         if (res.sysVolShrink > 0) {
           totalVolumeSys += res.sysVolShrink * res.sliceThickness / 1000;
         } else if (res.sysVolGrow > 0) {
@@ -213,7 +237,25 @@ public class DistribTool {
           totalVolumeDia += res.diaVolGrow * res.sliceThickness / 1000;
         }
       }
-      System.out.println(tup._1() + "," + totalVolumeSys + "," + totalVolumeDia);
+      System.out.println(caseId + "," + totalVolumeSys + "," + totalVolumeDia);
+    }
+
+    // Optionally save out the series results so that we can refine the volume
+    // calculations offline without recomputing image features or area calculations.
+    if (args.length > 1) {
+      Path seriesResultsOutputPath = new Path(args[1]);
+      PrintStream fout = new PrintStream(seriesResultsOutputPath.getFileSystem(new Configuration())
+          .create(seriesResultsOutputPath));
+      System.out.println("Saving seriesResults out to " + args[1]);
+      for (Integer caseId : sortedResults.keySet()) {
+        List<SeriesResult> seriesResultList = sortedResults.get(caseId);
+        for (SeriesResult res : seriesResultList) {
+          fout.println(caseId + "," + res.seriesNumber + "," + res.sliceLocation
+              + "," + res.sliceThickness + "," + res.sysVolShrink + "," + res.diaVolShrink
+              + "," + res.sysVolGrow + "," + res.diaVolGrow);
+        }
+      }
+      fout.close();
     }
 
     /*for (Tuple2<Integer, String> tup : dcmPathsRdd.collect()) {
