@@ -143,8 +143,13 @@ public class LocalTool {
               cc.xmax, (cc.ymin + cc.ymax) / 2);
         }
         if (chosen != null) {
+          BufferedImage raw = rawImageList.get(i);
+          Graphics2D g2d = (Graphics2D) raw.getGraphics();
+          g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.2f));
+          g2d.setPaint(Color.green);
           for (Point p : chosen.points) {
             cur.setRGB(p.x, p.y, 0xffffffff);
+            g2d.drawLine(p.x, p.y, p.x, p.y);
           }
         }
       }
