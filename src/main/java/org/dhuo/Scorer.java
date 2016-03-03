@@ -14,10 +14,10 @@ public class Scorer {
     }
 
     // From case id to the array of CDF values for Systole.
-    Map<String, double[]> sysProbs = new TreeMap<String, double[]>();
+    Map<Integer, double[]> sysProbs = new TreeMap<Integer, double[]>();
 
     // From case id to the array of CDF values for Diastole.
-    Map<String, double[]> diaProbs = new TreeMap<String, double[]>();
+    Map<Integer, double[]> diaProbs = new TreeMap<Integer, double[]>();
 
     System.out.println("Parsing submission data...");
     {
@@ -33,9 +33,9 @@ public class Scorer {
         }
 
         if ("Diastole".equals(idTokens[1])) {
-          diaProbs.put(idTokens[0], probs);
+          diaProbs.put(Integer.parseInt(idTokens[0]), probs);
         } else if ("Systole".equals(idTokens[1])) {
-          sysProbs.put(idTokens[0], probs);
+          sysProbs.put(Integer.parseInt(idTokens[0]), probs);
         } else {
           System.err.println("Invalid row: " + line);
           System.exit(1);
@@ -45,8 +45,8 @@ public class Scorer {
     System.out.format(
         "Parsed %d sysProbs and %d diaProbs\n", sysProbs.size(), diaProbs.size());
 
-    Map<String, Double> sysAnswers = new TreeMap<String, Double>();
-    Map<String, Double> diaAnswers = new TreeMap<String, Double>();
+    Map<Integer, Double> sysAnswers = new TreeMap<Integer, Double>();
+    Map<Integer, Double> diaAnswers = new TreeMap<Integer, Double>();
 
     System.out.println("Parsing answers...");
     {
@@ -55,8 +55,8 @@ public class Scorer {
       while (scan.hasNextLine()) {
         String line = scan.nextLine();
         String[] parts = line.split(",");
-        sysAnswers.put(parts[0], Double.parseDouble(parts[1]));
-        diaAnswers.put(parts[0], Double.parseDouble(parts[2]));
+        sysAnswers.put(Integer.parseInt(parts[0]), Double.parseDouble(parts[1]));
+        diaAnswers.put(Integer.parseInt(parts[0]), Double.parseDouble(parts[2]));
       }
     }
     System.out.format("Parsed %d sysAnswers and %d diaAnswers\n",
@@ -69,8 +69,8 @@ public class Scorer {
           "Mismatched keySet size for answers! %d vs %d\n",
           sysAnswers.keySet().size(), diaAnswers.keySet().size());
     }
-    Set<String> caseIds = sysAnswers.keySet();
-    for (String caseId : caseIds) {
+    Set<Integer> caseIds = sysAnswers.keySet();
+    for (Integer caseId : caseIds) {
       double sysScore = 0;
       for (int vol = 0; vol < 600; ++vol) {
         if (vol > 0 && sysProbs.get(caseId)[vol] < sysProbs.get(caseId)[vol - 1]) {

@@ -61,12 +61,20 @@ The lib/ files will need to be made available on java.library.path.
 -How to do numerical integration of slices
   -Simpsons for quadratic interpolation instead of step or linear.
 
+## DONE
+
+-Linear regression for raw estimates to observed, then generate CDFs based on observed variance
+-Add demuxing of cases like 123
+-Add de-duping of same slice location
 
 ## TODO
 
--Remember to add handling of the mixed series like case 123
-  -Last number suffix appears to denote different slice locations which may overlap with other sax directories for the same case.
-  -Series number still the same within the mixed directory.
-  -Dedupe by SeriesNumber-SliceLocation?
--Maybe use niblack instead of naive luminosity threshold for binarization
--At least use dynamic threshold per image if not adaptive dynamic like niblack.
+-Reconstruction Time
+  -Detect bogus slice info if adjacent slices disagree on approx position of LV
+  -How to estimate missed slices near the LA.
+-Image feature time
+  -Maybe use niblack instead of naive luminosity threshold for binarization
+  -At least use dynamic threshold per image if not adaptive dynamic like niblack.
+  -Missed slices near the LA may have been missed due to disappearing of walls at systole; maybe check shorter sub snippets
+  -Maybe back out elliptical approximation instead of pure pixel count
+  -Incorporate 2ch and/or 4ch

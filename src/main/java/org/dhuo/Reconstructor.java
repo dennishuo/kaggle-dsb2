@@ -34,9 +34,58 @@ public class Reconstructor {
         locationBuckets.get(roundedLocation).add(res);
       }
 
+      // TODO(dhuo): Also weed out slices that have identified an LV that is in a vastly different
+      // location than other adjacent slices.
+
+      List<AggregatedSeriesResult> aggregated = new ArrayList<AggregatedSeriesResult>();
+      for (Integer locationId : locationBuckets.keySet()) {
+        int validCount = 0;
+        double sumVolSys = 0;
+        double sumVolDia = 0;
+        for (SeriesResult res : locationBuckets.get(locationId)) {
+          if (res.sysVolShrink > 0 || res.diaVolShrink > 0) {
+            ++validCount;
+            sumVolSys += res.sysVolShrink;
+            sumVolDia += res.diaVolShrink;
+          }
+          if (res.sysVolGrow > 0 || res.diaVolGrow > 0) {
+            ++validCount;
+            sumVolSys += res.sysVolGrow;
+            sumVolDia += res.diaVolGrow;
+          }
+        }
+        if (validCount > 0) {
+          sumVolSys /= validCount;
+          sumVolDia /= validCount;
+          AggregatedSeriesResult agg = new AggregatedSeriesResult();
+          agg.sliceLocation = locationBuckets.get(locationId).get(0).sliceLocation;
+          agg.sliceThickness = locationBuckets.get(locationId).get(0).sliceThickness;
+          agg.volumeSys = sumVolSys;
+          agg.volumeDia = sumVolDia;
+          agg.validCount = validCount;
+          aggregated.add(agg);
+          // Slices that didn't yield measurements will be left out as if they didn't exist.
+        }
+      }
+
       double totalVolumeSys = 0;
       double totalVolumeDia = 0;
-      for (SeriesResult res : seriesResultList) {
+      if (aggregated.size() > 1) {
+        // For now, only accept cases that had at least two useful slices, otherwise we'll fallback
+        // to some other logic.
+        for (int i = 1; i < aggregated.size(); ++i) {
+          // Trapezoidal approximation for now?
+          double averageSys = aggregated.get(i).volumeSys + aggregated.get(i - 1).volumeSys;
+          averageSys /= 2;
+          double averageDia = aggregated.get(i).volumeDia + aggregated.get(i - 1).volumeDia;
+          averageDia /= 2;
+          double distance = aggregated.get(i).sliceLocation - aggregated.get(i - 1).sliceLocation;
+          totalVolumeSys += averageSys * distance / 1000;
+          totalVolumeDia += averageDia * distance / 1000;
+        }
+      }
+
+      /*for (SeriesResult res : seriesResultList) {
         if (res.sysVolShrink > 0) {
           totalVolumeSys += res.sysVolShrink * res.sliceThickness / 1000;
         } else if (res.sysVolGrow > 0) {
@@ -47,7 +96,7 @@ public class Reconstructor {
         } else if (res.diaVolGrow > 0) {
           totalVolumeDia += res.diaVolGrow * res.sliceThickness / 1000;
         }
-      }
+      }*/
       CaseSummary summary = new CaseSummary();
       summary.caseId = caseId;
       summary.totalVolumeSys = totalVolumeSys;

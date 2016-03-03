@@ -156,8 +156,20 @@ public class SubmissionWriter {
 
       // Finally, emit the output distributions.
       for (Integer caseId : predSys.keySet()) {
-        int adjSys = (int) Math.round(regressSys.predict(predSys.get(caseId)));
-        int adjDia = (int) Math.round(regressDia.predict(predDia.get(caseId)));
+        int adjSys;
+        int adjDia;
+        adjSys = (int) Math.round(regressSys.predict(predSys.get(caseId)));
+        adjDia = (int) Math.round(regressDia.predict(predDia.get(caseId)));
+        /*if (predSys.get(caseId) > 0) {
+          adjSys = (int) Math.round(regressSys.predict(predSys.get(caseId)));
+        } else {
+          adjSys = 72;  // Fallback to global avg
+        }
+        if (predDia.get(caseId) > 0) {
+          adjDia = (int) Math.round(regressDia.predict(predDia.get(caseId)));
+        } else {
+          adjDia = 166;  // Fallback to global avg
+        }*/
 
         out.print(caseId + "_Diastole");
         for (int vol = 0; vol < adjDia + minErrDia && vol < 600; ++vol) {

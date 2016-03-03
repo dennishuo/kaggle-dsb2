@@ -7,11 +7,12 @@ import java.io.Serializable;
  * series/sliceLocation timeseries.
  */
 public class SeriesResult implements Serializable {
-  public int seriesNumber = 0;
-  public double sliceLocation = 0;
-  public double sliceThickness = 0;
-  public double sysVolShrink = 0;
-  public double diaVolShrink = 0;
-  public double sysVolGrow = 0;
-  public double diaVolGrow  = 0;
+  public int seriesNumber;
+  public double sliceLocation;
+  public double sliceThickness;
+  public double sysVolShrink;
+  public double diaVolShrink;
+  // Actually "area".
+  public double sysVolGrow;
+  public double diaVolGrow;
 }
