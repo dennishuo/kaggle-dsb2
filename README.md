@@ -33,16 +33,22 @@ The bin/opencv-3.0.0.jar should be added to the Java classpath for both compilat
 The lib/ files will need to be made available on java.library.path.
 
 
-## Running LocalTool
+## Running Local tools
 
     mvn clean package
     java -cp lib/ij.jar:target/kaggle-dsb2-1.0.jar org.dhuo.LocalTool ../data/250/study/sax_6
+    java -cp target/kaggle-dsb2-1.0.jar org.dhuo.Reconstructor ../data/train_series_results_20160302_0.csv
+    java -cp ~/Downloads/commons-math3-3.2.jar:target/kaggle-dsb2-1.0.jar org.dhuo.SubmissionWriter ../data/train_spark0_presubmit.csv ../data/train_spark0_presubmit.csv  ../data/train.csv > ../data/train_spark0_adj_auto.csv
+    java -cp ~/Downloads/commons-math3-3.2.jar:target/kaggle-dsb2-1.0.jar org.dhuo.Scorer ../data/train_spark0_adj_auto.csv ../data/train.csv
 
+## Running DistribTool on local Spark
+
+    spark-submit --master local[1] --jars lib/ij.jar --class org.dhuo.DistribTool target/kaggle-dsb2-1.0.jar file:///home/user/projex/kaggle-dsb2/data4 foop.csv
 
 ## Running on Dataproc
 
     # Due to DICOM.java unwisely using "private static Properties dictionary", need spark.executor.cores=1 and to adjust memory accordingly.
-    gcloud dataproc jobs submit spark --cluster dhuo-dcm2 --properties spark.executor.cores=1,spark.executor.memory=2g --jars lib/ij.jar,target/kaggle-dsb2-1.0.jar --class org.dhuo.DistribTool gs://dhuo-kaggle-dsb2/train_data/train
+    gcloud dataproc jobs submit spark --cluster dhuo-dcm-20160302-0 --properties spark.executor.cores=1,spark.executor.memory=1500m --jars gs://dhuo-gce/ij.jar,target/kaggle-dsb2-1.0.jar --class org.dhuo.DistribTool gs://dhuo-kaggle-dsb2/train_data/train gs://dhuo-kaggle-dsb2/train_series_results_20160302_0.csv
 
 ## Areas of investigation
 

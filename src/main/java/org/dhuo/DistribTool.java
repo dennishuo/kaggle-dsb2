@@ -236,9 +236,14 @@ public class DistribTool {
       for (Integer caseId : sortedResults.keySet()) {
         List<SeriesResult> seriesResultList = sortedResults.get(caseId);
         for (SeriesResult res : seriesResultList) {
-          fout.println(caseId + "," + res.seriesNumber + "," + res.sliceLocation
-              + "," + res.sliceThickness + "," + res.sysVolShrink + "," + res.diaVolShrink
-              + "," + res.sysVolGrow + "," + res.diaVolGrow);
+          fout.println(caseId
+              + "," + res.seriesNumber
+              + "," + res.sliceLocation
+              + "," + res.sliceThickness
+              + "," + res.sysVolShrink
+              + "," + res.diaVolShrink
+              + "," + res.sysVolGrow
+              + "," + res.diaVolGrow);
         }
       }
       fout.close();
